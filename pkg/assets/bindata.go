@@ -33,9 +33,7 @@
 // assets/components/openshift-dns/dns/service-account.yaml
 // assets/components/openshift-dns/dns/service.yaml
 // assets/components/openshift-dns/node-resolver/daemonset.yaml
-// assets/components/openshift-dns/node-resolver/daemonset.yaml.tmpl
 // assets/components/openshift-dns/node-resolver/service-account.yaml
-// assets/components/openshift-dns/node-resolver/update-node-resolver.sh
 // assets/components/openshift-router/cluster-role-binding.yaml
 // assets/components/openshift-router/cluster-role.yaml
 // assets/components/openshift-router/configmap.yaml
@@ -67,6 +65,7 @@
 // assets/crd/0000_01_route.crd.yaml
 // assets/crd/0000_03_authorization-openshift_01_rolebindingrestriction.crd.yaml
 // assets/crd/0000_03_security-openshift_01_scc.crd.yaml
+// assets/crd/0000_03_securityinternal-openshift_02_rangeallocation.crd.yaml
 // assets/crd/0000_10_config-operator_01_featuregate.crd.yaml
 // assets/crd/0000_20_topolvm.cybozu.com_logicalvolumes.yaml
 // assets/scc/0000_20_kube-apiserver-operator_00_scc-anyuid.yaml
@@ -1824,93 +1823,6 @@ func assetsComponentsOpenshiftDnsNodeResolverDaemonsetYaml() (*asset, error) {
 	return a, nil
 }
 
-var _assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmpl = []byte(`apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: node-resolver
-  namespace: openshift-dns
-spec:
-  revisionHistoryLimit: 10
-  selector:
-    matchLabels:
-      dns.operator.openshift.io/daemonset-node-resolver: ""
-  template:
-    metadata:
-      annotations:
-        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
-      labels:
-        dns.operator.openshift.io/daemonset-node-resolver: ""
-    spec:
-      containers:
-      - command:
-        - /bin/bash
-        - -c
-        - |
-${NODE_RESOLVER_SCRIPT}
-        env:
-        - name: SERVICES
-          # Comma or space separated list of services
-          # NOTE: For now, ensure these are relative names; for each relative name,
-          # an alias with the CLUSTER_DOMAIN suffix will also be added.
-          value: "image-registry.openshift-image-registry.svc"
-        - name: NAMESERVER
-          value: 172.30.0.10
-        - name: CLUSTER_DOMAIN
-          value: cluster.local
-        image: {{ .ReleaseImage.cli }}
-        imagePullPolicy: IfNotPresent
-        name: dns-node-resolver
-        resources:
-          requests:
-            cpu: 5m
-            memory: 21Mi
-        securityContext:
-          privileged: true
-        terminationMessagePath: /dev/termination-log
-        terminationMessagePolicy: FallbackToLogsOnError
-        volumeMounts:
-        - mountPath: /etc/hosts
-          name: hosts-file
-      dnsPolicy: ClusterFirst
-      hostNetwork: true
-      nodeSelector:
-        kubernetes.io/os: linux
-      priorityClassName: system-node-critical
-      restartPolicy: Always
-      schedulerName: default-scheduler
-      securityContext: {}
-      serviceAccount: node-resolver
-      serviceAccountName: node-resolver
-      terminationGracePeriodSeconds: 30
-      tolerations:
-      - operator: Exists
-      volumes:
-      - hostPath:
-          path: /etc/hosts
-          type: File
-        name: hosts-file
-  updateStrategy:
-    rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 33%
-    type: RollingUpdate
-`)
-
-func assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmplBytes() ([]byte, error) {
-	return _assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmpl, nil
-}
-
-func assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmpl() (*asset, error) {
-	bytes, err := assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmplBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "assets/components/openshift-dns/node-resolver/daemonset.yaml.tmpl", size: 2023, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
 var _assetsComponentsOpenshiftDnsNodeResolverServiceAccountYaml = []byte(`kind: ServiceAccount
 apiVersion: v1
 metadata:
@@ -1929,80 +1841,6 @@ func assetsComponentsOpenshiftDnsNodeResolverServiceAccountYaml() (*asset, error
 	}
 
 	info := bindataFileInfo{name: "assets/components/openshift-dns/node-resolver/service-account.yaml", size: 95, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
-	a := &asset{bytes: bytes, info: info}
-	return a, nil
-}
-
-var _assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverSh = []byte(`#!/bin/bash
-set -uo pipefail
-
-trap 'jobs -p | xargs kill || true; wait; exit 0' TERM
-
-OPENSHIFT_MARKER="openshift-generated-node-resolver"
-HOSTS_FILE="/etc/hosts"
-TEMP_FILE="/etc/hosts.tmp"
-
-IFS=', ' read -r -a services <<< "${SERVICES}"
-
-# Make a temporary file with the old hosts file's attributes.
-cp -f --attributes-only "${HOSTS_FILE}" "${TEMP_FILE}"
-
-while true; do
-  declare -A svc_ips
-  for svc in "${services[@]}"; do
-    # Fetch service IP from cluster dns if present. We make several tries
-    # to do it: IPv4, IPv6, IPv4 over TCP and IPv6 over TCP. The two last ones
-    # are for deployments with Kuryr on older OpenStack (OSP13) - those do not
-    # support UDP loadbalancers and require reaching DNS through TCP.
-    cmds=('dig -t A @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"'
-          'dig -t AAAA @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"'
-          'dig -t A +tcp +retry=0 @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"'
-          'dig -t AAAA +tcp +retry=0 @"${NAMESERVER}" +short "${svc}.${CLUSTER_DOMAIN}"|grep -v "^;"')
-    for i in ${!cmds[*]}
-    do
-      ips=($(eval "${cmds[i]}"))
-      if [[ "$?" -eq 0 && "${#ips[@]}" -ne 0 ]]; then
-        svc_ips["${svc}"]="${ips[@]}"
-        break
-      fi
-    done
-  done
-
-  # Update /etc/hosts only if we get valid service IPs
-  # We will not update /etc/hosts when there is coredns service outage or api unavailability
-  # Stale entries could exist in /etc/hosts if the service is deleted
-  if [[ -n "${svc_ips[*]-}" ]]; then
-    # Build a new hosts file from /etc/hosts with our custom entries filtered out
-    grep -v "# ${OPENSHIFT_MARKER}" "${HOSTS_FILE}" > "${TEMP_FILE}"
-
-    # Append resolver entries for services
-    for svc in "${!svc_ips[@]}"; do
-      for ip in ${svc_ips[${svc}]}; do
-        echo "${ip} ${svc} ${svc}.${CLUSTER_DOMAIN} # ${OPENSHIFT_MARKER}" >> "${TEMP_FILE}"
-      done
-    done
-
-    # TODO: Update /etc/hosts atomically to avoid any inconsistent behavior
-    # Replace /etc/hosts with our modified version if needed
-    cmp "${TEMP_FILE}" "${HOSTS_FILE}" || cp -f "${TEMP_FILE}" "${HOSTS_FILE}"
-    # TEMP_FILE is not removed to avoid file create/delete and attributes copy churn
-  fi
-  sleep 60 & wait
-  unset svc_ips
-done
-`)
-
-func assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverShBytes() ([]byte, error) {
-	return _assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverSh, nil
-}
-
-func assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverSh() (*asset, error) {
-	bytes, err := assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverShBytes()
-	if err != nil {
-		return nil, err
-	}
-
-	info := bindataFileInfo{name: "assets/components/openshift-dns/node-resolver/update-node-resolver.sh", size: 2285, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -4921,6 +4759,74 @@ func assetsCrd0000_03_securityOpenshift_01_sccCrdYaml() (*asset, error) {
 	return a, nil
 }
 
+var _assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYaml = []byte(`# 0000_03_securityinternal-openshift_02_rangeallocation.crd.yaml
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    api-approved.openshift.io: https://github.com/openshift/api/pull/751
+    include.release.openshift.io/ibm-cloud-managed: "true"
+    include.release.openshift.io/self-managed-high-availability: "true"
+    include.release.openshift.io/single-node-developer: "true"
+  name: rangeallocations.security.internal.openshift.io
+spec:
+  group: security.internal.openshift.io
+  names:
+    kind: RangeAllocation
+    listKind: RangeAllocationList
+    plural: rangeallocations
+    singular: rangeallocation
+  scope: Cluster
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: "RangeAllocation is used so we can easily expose a RangeAllocation
+          typed for security group This is an internal API, not intended for external
+          consumption. \n Compatibility level 1: Stable within a major release for
+          a minimum of 12 months or 3 minor releases (whichever is longer)."
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          data:
+            description: data is a byte array representing the serialized state of
+              a range allocation.  It is a bitmap with each bit set to one to represent
+              a range is taken.
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          range:
+            description: range is a string representing a unique label for a range
+              of uids, "1000000000-2000000000/10000".
+            type: string
+        type: object
+    served: true
+    storage: true
+`)
+
+func assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYamlBytes() ([]byte, error) {
+	return _assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYaml, nil
+}
+
+func assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYaml() (*asset, error) {
+	bytes, err := assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "assets/crd/0000_03_securityinternal-openshift_02_rangeallocation.crd.yaml", size: 2388, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _assetsCrd0000_10_configOperator_01_featuregateCrdYaml = []byte(`apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -5155,7 +5061,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccAnyuidYaml() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-anyuid.yaml", size: 1048, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-anyuid.yaml", size: 1048, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5219,7 +5125,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccHostaccessYaml() (*asset, erro
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-hostaccess.yaml", size: 1267, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-hostaccess.yaml", size: 1267, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5283,7 +5189,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccHostmountAnyuidYaml() (*asset,
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-hostmount-anyuid.yaml", size: 1298, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-hostmount-anyuid.yaml", size: 1298, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5345,7 +5251,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccHostnetworkYaml() (*asset, err
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-hostnetwork.yaml", size: 1123, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-hostnetwork.yaml", size: 1123, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5407,7 +5313,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccNonrootYaml() (*asset, error) 
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-nonroot.yaml", size: 1166, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-nonroot.yaml", size: 1166, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5471,7 +5377,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccPrivilegedYaml() (*asset, erro
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-privileged.yaml", size: 1291, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-privileged.yaml", size: 1291, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5534,7 +5440,7 @@ func assetsScc0000_20_kubeApiserverOperator_00_sccRestrictedYaml() (*asset, erro
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-restricted.yaml", size: 1213, mode: os.FileMode(420), modTime: time.Unix(1654679854, 0)}
+	info := bindataFileInfo{name: "assets/scc/0000_20_kube-apiserver-operator_00_scc-restricted.yaml", size: 1213, mode: os.FileMode(436), modTime: time.Unix(1654679854, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -5651,9 +5557,7 @@ var _bindata = map[string]func() (*asset, error){
 	"assets/components/openshift-dns/dns/service-account.yaml":                                               assetsComponentsOpenshiftDnsDnsServiceAccountYaml,
 	"assets/components/openshift-dns/dns/service.yaml":                                                       assetsComponentsOpenshiftDnsDnsServiceYaml,
 	"assets/components/openshift-dns/node-resolver/daemonset.yaml":                                           assetsComponentsOpenshiftDnsNodeResolverDaemonsetYaml,
-	"assets/components/openshift-dns/node-resolver/daemonset.yaml.tmpl":                                      assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmpl,
 	"assets/components/openshift-dns/node-resolver/service-account.yaml":                                     assetsComponentsOpenshiftDnsNodeResolverServiceAccountYaml,
-	"assets/components/openshift-dns/node-resolver/update-node-resolver.sh":                                  assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverSh,
 	"assets/components/openshift-router/cluster-role-binding.yaml":                                           assetsComponentsOpenshiftRouterClusterRoleBindingYaml,
 	"assets/components/openshift-router/cluster-role.yaml":                                                   assetsComponentsOpenshiftRouterClusterRoleYaml,
 	"assets/components/openshift-router/configmap.yaml":                                                      assetsComponentsOpenshiftRouterConfigmapYaml,
@@ -5685,6 +5589,7 @@ var _bindata = map[string]func() (*asset, error){
 	"assets/crd/0000_01_route.crd.yaml":                                                                      assetsCrd0000_01_routeCrdYaml,
 	"assets/crd/0000_03_authorization-openshift_01_rolebindingrestriction.crd.yaml":                          assetsCrd0000_03_authorizationOpenshift_01_rolebindingrestrictionCrdYaml,
 	"assets/crd/0000_03_security-openshift_01_scc.crd.yaml":                                                  assetsCrd0000_03_securityOpenshift_01_sccCrdYaml,
+	"assets/crd/0000_03_securityinternal-openshift_02_rangeallocation.crd.yaml":                              assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYaml,
 	"assets/crd/0000_10_config-operator_01_featuregate.crd.yaml":                                             assetsCrd0000_10_configOperator_01_featuregateCrdYaml,
 	"assets/crd/0000_20_topolvm.cybozu.com_logicalvolumes.yaml":                                              assetsCrd0000_20_topolvmCybozuCom_logicalvolumesYaml,
 	"assets/scc/0000_20_kube-apiserver-operator_00_scc-anyuid.yaml":                                          assetsScc0000_20_kubeApiserverOperator_00_sccAnyuidYaml,
@@ -5778,10 +5683,8 @@ var _bintree = &bintree{nil, map[string]*bintree{
 					"service.yaml":              {assetsComponentsOpenshiftDnsDnsServiceYaml, map[string]*bintree{}},
 				}},
 				"node-resolver": {nil, map[string]*bintree{
-					"daemonset.yaml":          {assetsComponentsOpenshiftDnsNodeResolverDaemonsetYaml, map[string]*bintree{}},
-					"daemonset.yaml.tmpl":     {assetsComponentsOpenshiftDnsNodeResolverDaemonsetYamlTmpl, map[string]*bintree{}},
-					"service-account.yaml":    {assetsComponentsOpenshiftDnsNodeResolverServiceAccountYaml, map[string]*bintree{}},
-					"update-node-resolver.sh": {assetsComponentsOpenshiftDnsNodeResolverUpdateNodeResolverSh, map[string]*bintree{}},
+					"daemonset.yaml":       {assetsComponentsOpenshiftDnsNodeResolverDaemonsetYaml, map[string]*bintree{}},
+					"service-account.yaml": {assetsComponentsOpenshiftDnsNodeResolverServiceAccountYaml, map[string]*bintree{}},
 				}},
 			}},
 			"openshift-router": {nil, map[string]*bintree{
@@ -5829,6 +5732,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			"0000_01_route.crd.yaml": {assetsCrd0000_01_routeCrdYaml, map[string]*bintree{}},
 			"0000_03_authorization-openshift_01_rolebindingrestriction.crd.yaml": {assetsCrd0000_03_authorizationOpenshift_01_rolebindingrestrictionCrdYaml, map[string]*bintree{}},
 			"0000_03_security-openshift_01_scc.crd.yaml":                         {assetsCrd0000_03_securityOpenshift_01_sccCrdYaml, map[string]*bintree{}},
+			"0000_03_securityinternal-openshift_02_rangeallocation.crd.yaml":     {assetsCrd0000_03_securityinternalOpenshift_02_rangeallocationCrdYaml, map[string]*bintree{}},
 			"0000_10_config-operator_01_featuregate.crd.yaml":                    {assetsCrd0000_10_configOperator_01_featuregateCrdYaml, map[string]*bintree{}},
 			"0000_20_topolvm.cybozu.com_logicalvolumes.yaml":                     {assetsCrd0000_20_topolvmCybozuCom_logicalvolumesYaml, map[string]*bintree{}},
 		}},
