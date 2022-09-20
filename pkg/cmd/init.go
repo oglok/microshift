@@ -173,12 +173,29 @@ func initCerts(cfg *config.MicroshiftConfig) ([]byte, *cryptomaterial.Certificat
 			cryptomaterial.ServiceCADir(certsDir),
 			cryptomaterial.ServiceCAValidityDays,
 		),
+
+		cryptomaterial.NewCertificateSigner(
+			"kube-apiserver-service-network-signer",
+			cryptomaterial.KubeAPIServerServiceNetworkSignerCertDir(certsDir),
+			cryptomaterial.KubeAPIServerServiceNetworkValidityDays,
+		).WithServingCertificates(
+			&cryptomaterial.ServingCertificateSigningRequestInfo{
+				CertificateSigningRequestInfo: cryptomaterial.CertificateSigningRequestInfo{
+					Name:         "kube-apiserver-service-network-serving",
+					ValidityDays: cryptomaterial.ServingCertValidityDays,
+				},
+				Hostnames: []string{"kube-apiserver", cfg.NodeIP, cfg.NodeName, "127.0.0.1", "kubernetes.default.svc", "kubernetes.default", "kubernetes",
+					"localhost",
+					apiServerServiceIP.String()},
+			},
+		),
 	).WithCABundle(
 		cryptomaterial.TotalClientCABundlePath(certsDir),
 		"kube-control-plane-signer",
 		"kube-apiserver-to-kubelet-signer",
 		"admin-kubeconfig-signer",
 		"kubelet-signer",
+		"kube-apiserver-service-network-signer",
 		// kube-csr-signer is being added below
 	).WithCABundle(
 		cryptomaterial.KubeletClientCAPath(certsDir),
@@ -186,6 +203,7 @@ func initCerts(cfg *config.MicroshiftConfig) ([]byte, *cryptomaterial.Certificat
 		"kube-apiserver-to-kubelet-signer",
 		"admin-kubeconfig-signer",
 		"kubelet-signer",
+		"kube-apiserver-service-network-signer",
 		// kube-csr-signer is being added below
 	).Complete()
 
@@ -212,6 +230,7 @@ func initCerts(cfg *config.MicroshiftConfig) ([]byte, *cryptomaterial.Certificat
 		[]string{"localhost", cfg.NodeIP, "127.0.0.1", cfg.NodeName}); err != nil {
 		return nil, nil, err
 	}
+
 	if err := util.GenCerts("kube-apiserver", filepath.Join(cfg.DataDir, "/certs/kube-apiserver/secrets/service-network-serving-certkey"),
 		"tls.crt", "tls.key",
 		[]string{"kube-apiserver", cfg.NodeIP, cfg.NodeName, "127.0.0.1", "kubernetes.default.svc", "kubernetes.default", "kubernetes",

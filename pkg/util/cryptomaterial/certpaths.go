@@ -13,9 +13,11 @@ const (
 	ClientCertFileName = "client.crt"
 	ClientKeyFileName  = "client.key"
 
-	ClientCAValidityDays                  = 60
-	ClientCertValidityDays                = 30
-	AdminKubeconfigClientCertValidityDays = 365 * 10
+	ClientCAValidityDays                    = 60
+	ClientCertValidityDays                  = 30
+	ServingCertValidityDays                 = 30
+	AdminKubeconfigClientCertValidityDays   = 365 * 10
+	KubeAPIServerServiceNetworkValidityDays = 365 * 10
 
 	ServiceCAValidityDays = 790
 )
@@ -50,6 +52,10 @@ func KubeAPIServerToKubeletSignerCertDir(certsDir string) string {
 
 func KubeAPIServerToKubeletClientCertDir(certsDir string) string {
 	return filepath.Join(KubeAPIServerToKubeletSignerCertDir(certsDir), "kube-apiserver-to-kubelet-client")
+}
+
+func KubeAPIServerServiceNetworkSignerCertDir(certsDir string) string {
+	return filepath.Join(certsDir, "kube-apiserver-service-network-signer")
 }
 
 func AdminKubeconfigSignerDir(certsDir string) string {
