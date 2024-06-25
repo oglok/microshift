@@ -18,6 +18,11 @@ const (
 	defaultManifestDirLibGlob = "/usr/lib/microshift/manifests.d/*"
 )
 
+type KustomizePathConfig struct {
+	Path   string `json:"path"`
+	Policy string `json:"policy"` // "apply" as default, "create" as an alternative
+}
+
 type Manifests struct {
 	// The locations on the filesystem to scan for kustomization
 	// files to use to load manifests. Set to a list of paths to scan
@@ -26,22 +31,22 @@ type Manifests struct {
 	// match multiple subdirectories.
 	//
 	// +kubebuilder:default={"/usr/lib/microshift/manifests","/usr/lib/microshift/manifests.d/*","/etc/microshift/manifests","/etc/microshift/manifests.d/*"}
-	KustomizePaths []string `json:"kustomizePaths"`
+	KustomizePathConfigs []KustomizePathConfig `json:"kustomizeConfigs"`
 }
 
 // GetKustomizationPaths returns the list of configured paths for
 // which there are actual kustomization files to be loaded. The paths
 // are returned in the order given in the configuration file. The
 // results of any glob patterns are sorted lexicographically.
-func (m *Manifests) GetKustomizationPaths() ([]string, error) {
+func (m *Manifests) GetKustomizationConfigs() ([]KustomizePathConfig, error) {
 	kustomizationFileNames := konfig.RecognizedKustomizationFileNames()
-	results := []string{}
-	for _, path := range m.KustomizePaths {
+	results := []KustomizePathConfig{}
+	for _, kustomizePathConfig := range m.KustomizePathConfigs {
 		for _, filename := range kustomizationFileNames {
-			pattern := filepath.Join(path, filename)
+			pattern := filepath.Join(kustomizePathConfig.Path, filename)
 			matches, err := filepath.Glob(pattern)
 			if err != nil {
-				return nil, fmt.Errorf("Could not understand kustomizePath value %v: %w", path, err)
+				return nil, fmt.Errorf("could not understand kustomizePath value %v: %w", kustomizePathConfig.Path, err)
 			}
 			if len(matches) == 0 {
 				klog.Infof("No kustomize path matches %v", pattern)
@@ -56,8 +61,9 @@ func (m *Manifests) GetKustomizationPaths() ([]string, error) {
 			// value, so we do it to ensure deterministic behavior.
 			sort.Strings(matches)
 			for _, match := range matches {
-				klog.Infof("Adding kustomize path %v", filepath.Dir(match))
-				results = append(results, filepath.Dir(match))
+				dir := filepath.Dir(match)
+				klog.Infof("Adding kustomize path %v with policy %v", dir, kustomizePathConfig.Policy)
+				results = append(results, KustomizePathConfig{Path: dir, Policy: kustomizePathConfig.Policy})
 			}
 		}
 	}

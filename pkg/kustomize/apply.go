@@ -3,10 +3,8 @@ package kustomize
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/openshift/microshift/pkg/config"
 	"github.com/spf13/cobra"
@@ -20,42 +18,6 @@ import (
 	"sigs.k8s.io/kustomize/api/konfig"
 )
 
-const (
-	retryInterval = 10 * time.Second
-	retryTimeout  = 1 * time.Minute
-)
-
-type Kustomizer struct {
-	cfg        *config.Config
-	kubeconfig string
-}
-
-func NewKustomizer(cfg *config.Config) *Kustomizer {
-	return &Kustomizer{
-		cfg:        cfg,
-		kubeconfig: cfg.KubeConfigPath(config.KubeAdmin),
-	}
-}
-
-func (s *Kustomizer) Name() string           { return "kustomizer" }
-func (s *Kustomizer) Dependencies() []string { return []string{"kube-apiserver"} }
-
-func (s *Kustomizer) Run(ctx context.Context, ready chan<- struct{}, stopped chan<- struct{}) error {
-	defer close(stopped)
-	defer close(ready)
-
-	kustomizationPaths, err := s.cfg.Manifests.GetKustomizationPaths()
-	if err != nil {
-		return fmt.Errorf("failed to find any kustomization paths: %w", err)
-	}
-
-	for _, path := range kustomizationPaths {
-		s.applyKustomizationPath(ctx, path)
-	}
-
-	return ctx.Err()
-}
-
 func (s *Kustomizer) applyKustomizationPath(ctx context.Context, path string) {
 	kustomizationFileNames := konfig.RecognizedKustomizationFileNames()
 
@@ -68,7 +30,7 @@ func (s *Kustomizer) applyKustomizationPath(ctx context.Context, path string) {
 		}
 
 		klog.Infof("Applying kustomization at %v ", kustomization)
-		if err := applyKustomizationWithRetries(ctx, path, s.kubeconfig); err != nil {
+		if err := applyKustomizationWithRetries(ctx, config.KustomizePathConfig{Path: kustomization}, s.kubeconfig); err != nil {
 			klog.Errorf("Applying kustomization at %v failed: %v. Giving up.", kustomization, err)
 		} else {
 			klog.Infof("Kustomization at %v applied successfully.", kustomization)
@@ -76,7 +38,7 @@ func (s *Kustomizer) applyKustomizationPath(ctx context.Context, path string) {
 	}
 }
 
-func applyKustomizationWithRetries(ctx context.Context, kustomization string, kubeconfig string) error {
+func applyKustomizationWithRetries(ctx context.Context, kustomization config.KustomizePathConfig, kubeconfig string) error {
 	return wait.PollUntilContextTimeout(ctx, retryInterval, retryTimeout, true, func(_ context.Context) (done bool, err error) {
 		if err := applyKustomization(kustomization, kubeconfig); err != nil {
 			klog.Infof("Applying kustomization failed: %s. Retrying in %s.", err, retryInterval)
@@ -86,7 +48,7 @@ func applyKustomizationWithRetries(ctx context.Context, kustomization string, ku
 	})
 }
 
-func applyKustomization(kustomization string, kubeconfig string) error {
+func applyKustomization(kustomization config.KustomizePathConfig, kubeconfig string) error {
 	klog.Infof("Applying kustomization at %s", kustomization)
 
 	cmds := &cobra.Command{
@@ -117,7 +79,7 @@ func applyKustomization(kustomization string, kubeconfig string) error {
 	groups.Add(cmds)
 
 	applyFlags := apply.NewApplyFlags(ioStreams)
-	applyFlags.DeleteFlags.FileNameFlags.Kustomize = &kustomization
+	applyFlags.DeleteFlags.FileNameFlags.Kustomize = &kustomization.Path
 	applyFlags.AddFlags(cmds)
 
 	o, err := applyFlags.ToOptions(f, cmds, "kubectl", nil)

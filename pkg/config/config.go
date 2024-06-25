@@ -129,11 +129,11 @@ func (c *Config) fillDefaults() error {
 		DefragCheckFreq:         5 * time.Minute,
 	}
 	c.Manifests = Manifests{
-		KustomizePaths: []string{
-			defaultManifestDirLib,
-			defaultManifestDirLibGlob,
-			defaultManifestDirEtc,
-			defaultManifestDirEtcGlob,
+		KustomizePathConfigs: []KustomizePathConfig{
+			{Path: defaultManifestDirLib, Policy: "apply"},
+			{Path: defaultManifestDirLibGlob, Policy: "apply"},
+			{Path: defaultManifestDirEtc, Policy: "apply"},
+			{Path: defaultManifestDirEtcGlob, Policy: "apply"},
 		},
 	}
 	c.Ingress = IngressConfig{
@@ -223,8 +223,8 @@ func (c *Config) incorporateUserSettings(u *Config) {
 	// Check for nil instead of an empty list because if a user
 	// provides a list but it is empty we want to treat that as
 	// disabling the manifest loader.
-	if u.Manifests.KustomizePaths != nil {
-		c.Manifests.KustomizePaths = u.Manifests.KustomizePaths
+	if u.Manifests.KustomizePathConfigs != nil {
+		c.Manifests.KustomizePathConfigs = u.Manifests.KustomizePathConfigs
 	}
 
 	if len(u.Ingress.Status) != 0 {
