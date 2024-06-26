@@ -32,7 +32,7 @@ func (s *Kustomizer) Run(ctx context.Context, ready chan<- struct{}, stopped cha
 	defer close(stopped)
 	defer close(ready)
 
-	kustomizationConfigs, err := s.cfg.Manifests.GetKustomizationConfigs()
+	kustomizationConfigs, err := s.cfg.Manifests.GetKustomizationPathConfigs()
 	if err != nil {
 		return fmt.Errorf("failed to find any kustomization paths: %w", err)
 	}

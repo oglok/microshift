@@ -81,11 +81,11 @@ manifests:
     # only those paths. Set to an empty list to disable loading
     # manifests. The entries in the list can be glob patterns to
     # match multiple subdirectories.
-    kustomizePaths:
-        - /usr/lib/microshift/manifests
-        - /usr/lib/microshift/manifests.d/*
-        - /etc/microshift/manifests
-        - /etc/microshift/manifests.d/*
+    kustomizePathConfigs:
+        -
+        -
+        -
+        -
 network:
     # IP address pool to use for pod IPs.
     # This field is immutable after installation.

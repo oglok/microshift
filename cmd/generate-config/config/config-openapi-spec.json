@@ -188,20 +188,44 @@
     "manifests": {
       "type": "object",
       "required": [
-        "kustomizePaths"
+        "kustomizePathConfigs"
       ],
       "properties": {
-        "kustomizePaths": {
+        "kustomizePathConfigs": {
           "description": "The locations on the filesystem to scan for kustomization\nfiles to use to load manifests. Set to a list of paths to scan\nonly those paths. Set to an empty list to disable loading\nmanifests. The entries in the list can be glob patterns to\nmatch multiple subdirectories.",
           "type": "array",
           "default": [
-            "/usr/lib/microshift/manifests",
-            "/usr/lib/microshift/manifests.d/*",
-            "/etc/microshift/manifests",
-            "/etc/microshift/manifests.d/*"
+            {
+              "Path": "/usr/lib/microshift/manifests",
+              "Policy": "apply"
+            },
+            {
+              "Path": "/usr/lib/microshift/manifests.d/*",
+              "Policy": "apply"
+            },
+            {
+              "Path": "/etc/microshift/manifests",
+              "Policy": "apply"
+            },
+            {
+              "Path": "/etc/microshift/manifests.d/*",
+              "Policy": "apply"
+            }
           ],
           "items": {
-            "type": "string"
+            "type": "object",
+            "required": [
+              "path",
+              "policy"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "policy": {
+                "type": "string"
+              }
+            }
           }
         }
       }

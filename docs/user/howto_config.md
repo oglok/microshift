@@ -37,8 +37,9 @@ ingress:
         namespaceOwnership: ""
     status: ""
 manifests:
-    kustomizePaths:
-        - ""
+    kustomizePathConfigs:
+        - path: ""
+          policy: ""
 network:
     clusterNetwork:
         - ""
@@ -92,11 +93,11 @@ ingress:
         namespaceOwnership: InterNamespaceAllowed
     status: Managed
 manifests:
-    kustomizePaths:
-        - /usr/lib/microshift/manifests
-        - /usr/lib/microshift/manifests.d/*
-        - /etc/microshift/manifests
-        - /etc/microshift/manifests.d/*
+    kustomizePathConfigs:
+        -
+        -
+        -
+        -
 network:
     clusterNetwork:
         - 10.42.0.0/16

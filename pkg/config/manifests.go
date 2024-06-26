@@ -30,17 +30,18 @@ type Manifests struct {
 	// manifests. The entries in the list can be glob patterns to
 	// match multiple subdirectories.
 	//
-	// +kubebuilder:default={"/usr/lib/microshift/manifests","/usr/lib/microshift/manifests.d/*","/etc/microshift/manifests","/etc/microshift/manifests.d/*"}
-	KustomizePathConfigs []KustomizePathConfig `json:"kustomizeConfigs"`
+	// +kubebuilder:default={{Path: "/usr/lib/microshift/manifests", Policy: "apply"}, {Path: "/usr/lib/microshift/manifests.d/*", Policy: "apply"}, {Path: "/etc/microshift/manifests", Policy: "apply"}, {Path: "/etc/microshift/manifests.d/*", Policy: "apply"}}
+	KustomizePathConfigs []KustomizePathConfig `json:"kustomizePathConfigs"`
 }
 
 // GetKustomizationPaths returns the list of configured paths for
 // which there are actual kustomization files to be loaded. The paths
 // are returned in the order given in the configuration file. The
 // results of any glob patterns are sorted lexicographically.
-func (m *Manifests) GetKustomizationConfigs() ([]KustomizePathConfig, error) {
+func (m *Manifests) GetKustomizationPathConfigs() ([]KustomizePathConfig, error) {
 	kustomizationFileNames := konfig.RecognizedKustomizationFileNames()
 	results := []KustomizePathConfig{}
+
 	for _, kustomizePathConfig := range m.KustomizePathConfigs {
 		for _, filename := range kustomizationFileNames {
 			pattern := filepath.Join(kustomizePathConfig.Path, filename)
