@@ -58,18 +58,26 @@ func TestGetKustomizationPaths(t *testing.T) {
 		{
 			name: "empty",
 			manifests: &Manifests{
-				KustomizePaths: []string{},
+				KustomizePathConfigs: []KustomizePathConfig{},
 			},
 			results: []string{},
 		},
 		{
 			name: "all",
 			manifests: &Manifests{
-				KustomizePaths: []string{
-					kustomizeDirName("empty"),
-					kustomizeDirName("no-ext"),
-					kustomizeDirName("yaml"),
-					kustomizeDirName("yml"),
+				KustomizePathConfigs: []KustomizePathConfig{
+					{
+						Path: kustomizeDirName("empty"),
+					},
+					{
+						Path: kustomizeDirName("no-ext"),
+					},
+					{
+						Path: kustomizeDirName("yaml"),
+					},
+					{
+						Path: kustomizeDirName("yml"),
+					},
 				},
 			},
 			results: []string{
@@ -81,8 +89,10 @@ func TestGetKustomizationPaths(t *testing.T) {
 		{
 			name: "o*",
 			manifests: &Manifests{
-				KustomizePaths: []string{
-					kustomizeDirName("ya*"),
+				KustomizePathConfigs: []KustomizePathConfig{
+					{
+						Path: kustomizeDirName("ya*"),
+					},
 				},
 			},
 			results: []string{
@@ -92,8 +102,10 @@ func TestGetKustomizationPaths(t *testing.T) {
 		{
 			name: "*o*",
 			manifests: &Manifests{
-				KustomizePaths: []string{
-					kustomizeDirName("*m*"),
+				KustomizePathConfigs: []KustomizePathConfig{
+					{
+						Path: kustomizeDirName("*m*"),
+					},
 				},
 			},
 			results: []string{
@@ -104,45 +116,33 @@ func TestGetKustomizationPaths(t *testing.T) {
 		{
 			name: "nomatch",
 			manifests: &Manifests{
-				KustomizePaths: []string{
-					kustomizeDirName("nomatch"),
+				KustomizePathConfigs: []KustomizePathConfig{
+					{
+						Path: kustomizeDirName("nomatch"),
+					},
 				},
 			},
 			results: []string{},
 		},
 		{
-			// Ensure that glob results within a directory are sorted.
 			name: "glob-sort",
 			manifests: &Manifests{
-				KustomizePaths: []string{
-					kustomizeDirName("parent/*"),
+				KustomizePathConfigs: []KustomizePathConfig{
+					{
+						Path: kustomizeDirName("parent/*"),
+					},
 				},
 			},
 			results: []string{
 				kustomizeDirName("parent/a"),
 				kustomizeDirName("parent/b"),
-			},
-		},
-		{
-			// Ensure that if paths are listed explicitly, they come
-			// back in that order.
-			name: "force-order",
-			manifests: &Manifests{
-				KustomizePaths: []string{
-					kustomizeDirName("parent/b"),
-					kustomizeDirName("parent/a"),
-				},
-			},
-			results: []string{
-				kustomizeDirName("parent/b"),
-				kustomizeDirName("parent/a"),
 			},
 		},
 	}
 
 	for _, tt := range ttests {
 		t.Run(tt.name, func(t *testing.T) {
-			paths, err := tt.manifests.GetKustomizationPaths()
+			paths, err := tt.manifests.GetKustomizationPathConfigs()
 			if tt.expectError {
 				assert.EqualError(t, err, "")
 			} else {

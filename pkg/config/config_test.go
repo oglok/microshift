@@ -137,8 +137,8 @@ func TestGetActiveConfigFromYAML(t *testing.T) {
 			          namedCertificates:
 			          - certPath: /tmp/fqdn-server-1.pem
 			            keyPath: /tmp/fqdn-server-1.key
-			            names: 
-			            - fqdn-server-1						
+			            names:
+			            - fqdn-server-1
 			          - certPath: /tmp/fqdn-server-2.pem
 			            keyPath: /tmp/fqdn-server-2.key
 			        `),
@@ -243,7 +243,7 @@ func TestGetActiveConfigFromYAML(t *testing.T) {
             # the manifests struct and paths keys are present but the paths
             # item is not a YAML list
             manifests:
-              kustomizePaths:
+              kustomizePathConfigs:
             `),
 			expected: func() *Config {
 				c := mkDefaultConfig()
@@ -255,11 +255,11 @@ func TestGetActiveConfigFromYAML(t *testing.T) {
 			name: "manifests-empty-list",
 			config: dedent(`
             manifests:
-              kustomizePaths: []
+              kustomizePathConfigs: []
             `),
 			expected: func() *Config {
 				c := mkDefaultConfig()
-				c.Manifests.KustomizePaths = []string{}
+				c.Manifests.KustomizePathConfigs = []KustomizePathConfig{}
 				assert.NoError(t, c.updateComputedValues())
 				return c
 			}(),
@@ -269,11 +269,43 @@ func TestGetActiveConfigFromYAML(t *testing.T) {
 			config: dedent(`
             manifests:
               kustomizePaths:
-                - /tmp/some/other/directory
+                - path: /tmp/some/other/directory
+			      policy: apply
             `),
 			expected: func() *Config {
 				c := mkDefaultConfig()
-				c.Manifests.KustomizePaths = []string{"/tmp/some/other/directory"}
+				c.Manifests.KustomizePathConfigs = []KustomizePathConfig{
+					{
+						Path:   "/tmp/some/other/directory",
+						Policy: "apply",
+					},
+				}
+				assert.NoError(t, c.updateComputedValues())
+				return c
+			}(),
+		},
+		{
+			name: "manifests-override2",
+			config: dedent(`
+            manifests:
+              kustomizePaths:
+                - path: /tmp/some/other/directory
+				  policy: apply
+				- path: /tmp/some/other/directory2
+				  policy: create
+            `),
+			expected: func() *Config {
+				c := mkDefaultConfig()
+				c.Manifests.KustomizePathConfigs = []KustomizePathConfig{
+					{
+						Path:   "/tmp/some/other/directory",
+						Policy: "apply",
+					},
+					{
+						Path:   "/tmp/some/other/directory2",
+						Policy: "create",
+					},
+				}
 				assert.NoError(t, c.updateComputedValues())
 				return c
 			}(),
@@ -335,6 +367,10 @@ func TestGetActiveConfigFromYAML(t *testing.T) {
 	for _, tt := range ttests {
 		t.Run(tt.name, func(t *testing.T) {
 			config, err := getActiveConfigFromYAML([]byte(tt.config))
+			if err != nil {
+				t.Fatalf("failed to parse config: %v", err)
+			}
+
 			// If we have any warnings, drop them. Use an empty array
 			// instead of nil so that we can differentiate between
 			// unexpected warnings (where we get an array instead of
