@@ -137,6 +137,7 @@ func (c *Config) fillDefaults() error {
 			defaultManifestDirEtc,
 			defaultManifestDirEtcGlob,
 		},
+		KustomizeCreatePaths: []string{},
 	}
 	c.Ingress = IngressConfig{
 		Status: StatusManaged,
@@ -227,6 +228,9 @@ func (c *Config) incorporateUserSettings(u *Config) {
 	// disabling the manifest loader.
 	if u.Manifests.KustomizePaths != nil {
 		c.Manifests.KustomizePaths = u.Manifests.KustomizePaths
+	}
+	if u.Manifests.KustomizeCreatePaths != nil {
+		c.Manifests.KustomizeCreatePaths = u.Manifests.KustomizeCreatePaths
 	}
 
 	if len(u.Ingress.Status) != 0 {

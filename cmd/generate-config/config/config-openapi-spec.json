@@ -188,9 +188,16 @@
     "manifests": {
       "type": "object",
       "required": [
+        "kustomizeCreatePaths",
         "kustomizePaths"
       ],
       "properties": {
+        "kustomizeCreatePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "kustomizePaths": {
           "description": "The locations on the filesystem to scan for kustomization\nfiles to use to load manifests. Set to a list of paths to scan\nonly those paths. Set to an empty list to disable loading\nmanifests. The entries in the list can be glob patterns to\nmatch multiple subdirectories.",
           "type": "array",

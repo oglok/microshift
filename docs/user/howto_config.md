@@ -37,6 +37,8 @@ ingress:
         namespaceOwnership: ""
     status: ""
 manifests:
+    kustomizeCreatePaths:
+        - ""
     kustomizePaths:
         - ""
 network:
@@ -92,6 +94,8 @@ ingress:
         namespaceOwnership: InterNamespaceAllowed
     status: Managed
 manifests:
+    kustomizeCreatePaths:
+        - ""
     kustomizePaths:
         - /usr/lib/microshift/manifests
         - /usr/lib/microshift/manifests.d/*

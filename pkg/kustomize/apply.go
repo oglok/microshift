@@ -44,13 +44,19 @@ func (s *Kustomizer) Run(ctx context.Context, ready chan<- struct{}, stopped cha
 	defer close(stopped)
 	defer close(ready)
 
-	kustomizationPaths, err := s.cfg.Manifests.GetKustomizationPaths()
+	kustomizationPaths, kustomizeCreatePaths, err := s.cfg.Manifests.GetAllKustomizationPaths()
 	if err != nil {
 		return fmt.Errorf("failed to find any kustomization paths: %w", err)
 	}
 
+	// Use apply policy in kustomizationPaths
 	for _, path := range kustomizationPaths {
 		s.applyKustomizationPath(ctx, path)
+	}
+
+	// Use create policy in kustomizationPaths
+	for _, path := range kustomizeCreatePaths {
+		s.createKustomizationPath(ctx, path)
 	}
 
 	return ctx.Err()
